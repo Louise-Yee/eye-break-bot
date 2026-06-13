@@ -318,6 +318,8 @@ class TimezoneView(View):
 
 # --- Bot ---
 
+MY_GUILD = discord.Object(id=1515210069480833125)
+
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
@@ -326,7 +328,7 @@ tree = app_commands.CommandTree(client)
 clock_in_prompted = set()
 
 
-@tree.command(name="timeon", description="Set your work hours for eye break reminders")
+@tree.command(guild=MY_GUILD,name="timeon", description="Set your work hours for eye break reminders")
 async def timeon(interaction: discord.Interaction):
     view = TimezoneView()
     await interaction.response.send_message(
@@ -334,7 +336,7 @@ async def timeon(interaction: discord.Interaction):
     )
 
 
-@tree.command(name="timeoff", description="Stop receiving eye break reminders")
+@tree.command(guild=MY_GUILD,name="timeoff", description="Stop receiving eye break reminders")
 async def timeoff(interaction: discord.Interaction):
     set_clocked_in(interaction.user.id, False)
     remove_schedule(interaction.user.id)
@@ -344,7 +346,7 @@ async def timeoff(interaction: discord.Interaction):
     )
 
 
-@tree.command(name="status", description="See who is clocked in and their break stats")
+@tree.command(guild=MY_GUILD,name="status", description="See who is clocked in and their break stats")
 async def status(interaction: discord.Interaction):
     schedules = get_all_schedules()
     if not schedules:
@@ -374,7 +376,7 @@ def owner_only(interaction: discord.Interaction) -> bool:
     return interaction.user.id == OWNER_ID
 
 
-@tree.command(name="admin_clockin", description="[Owner] Manually clock in a user")
+@tree.command(guild=MY_GUILD,name="admin_clockin", description="[Owner] Manually clock in a user")
 @app_commands.check(owner_only)
 async def admin_clockin(interaction: discord.Interaction, user: discord.Member):
     set_clocked_in(user.id, True)
@@ -386,7 +388,7 @@ async def admin_clockin(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message(f"{user.display_name} clocked in.", ephemeral=True)
 
 
-@tree.command(name="admin_clockout", description="[Owner] Manually clock out a user")
+@tree.command(guild=MY_GUILD,name="admin_clockout", description="[Owner] Manually clock out a user")
 @app_commands.check(owner_only)
 async def admin_clockout(interaction: discord.Interaction, user: discord.Member):
     set_clocked_in(user.id, False)
@@ -397,7 +399,7 @@ async def admin_clockout(interaction: discord.Interaction, user: discord.Member)
     await interaction.response.send_message(f"{user.display_name} clocked out.", ephemeral=True)
 
 
-@tree.command(name="admin_test", description="[Owner] Fire a break reminder immediately")
+@tree.command(guild=MY_GUILD,name="admin_test", description="[Owner] Fire a break reminder immediately")
 @app_commands.check(owner_only)
 async def admin_test(interaction: discord.Interaction):
     channel = client.get_channel(REMINDER_CHANNEL_ID)
@@ -482,13 +484,11 @@ async def background_loop():
                 )
 
 
-MY_GUILD = discord.Object(id=1515210069480833125)
-
 @client.event
 async def on_ready():
     audit.init(client)
-    tree.copy_global_to(guild=MY_GUILD)
     await tree.sync(guild=MY_GUILD)
+    await tree.sync()  # clears any previously registered global commands
     print(f"Logged in as {client.user}")
     client.loop.create_task(background_loop())
 
