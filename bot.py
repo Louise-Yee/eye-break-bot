@@ -215,6 +215,7 @@ class BreakView(View):
         self.user_ids = set(user_ids)
         self.taken = set()
         self.missed = set()
+        self.message = None  # set after sending
 
     def _build_content(self):
         lines = ["Eye break! Look 20 feet away for 20 seconds. Did you take your break?"]
@@ -237,6 +238,8 @@ class BreakView(View):
             if user_id not in self.taken and user_id not in self.missed:
                 record_break(user_id, took=False)
                 await audit.break_missed(user_id, reason="timeout")
+        if self.message:
+            await self.message.edit(content=self._build_content(), view=None)
 
     @discord.ui.button(label="Yes, took break", style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: Button):
@@ -410,10 +413,11 @@ async def admin_test(interaction: discord.Interaction):
     mentions = " ".join(f"<@{uid}>" for uid in clocked_in_users)
     view = BreakView(set(clocked_in_users))
     await audit.admin_test(interaction.user.id, clocked_in_users)
-    await channel.send(
+    msg = await channel.send(
         f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
         view=view
     )
+    view.message = msg
     await interaction.response.send_message("Test reminder sent.", ephemeral=True)
 
 
@@ -478,10 +482,11 @@ async def background_loop():
                 mentions = " ".join(f"<@{uid}>" for uid in clocked_in_users)
                 view = BreakView(set(clocked_in_users))
                 await audit.break_reminder_sent(clocked_in_users)
-                await channel.send(
+                msg = await channel.send(
                     f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
                     view=view
                 )
+                view.message = msg
 
 
 @client.event
