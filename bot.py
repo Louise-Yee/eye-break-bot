@@ -428,9 +428,12 @@ async def background_loop():
                 )
 
 
+MY_GUILD = discord.Object(id=1515210069480833125)
+
 @client.event
 async def on_ready():
-    await tree.sync()
+    tree.copy_global_to(guild=MY_GUILD)
+    await tree.sync(guild=MY_GUILD)
     print(f"Logged in as {client.user}")
     client.loop.create_task(background_loop())
 
