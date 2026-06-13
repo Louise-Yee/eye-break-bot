@@ -1,3 +1,4 @@
 .env
 schedules.db
 __pycache__/
+*.py[cod]
