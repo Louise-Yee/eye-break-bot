@@ -26,8 +26,11 @@ class StatusCog(commands.Cog):
             current_time = datetime.now(tz).strftime("%H:%M")
             tz_label = next((l for l, t in TIMEZONES if t == schedule.timezone), schedule.timezone)
             icon = "🟢" if clock.clocked_in else "⚪"
-            member = interaction.guild.get_member(schedule.user_id) if interaction.guild else None
-            display_name = member.display_name if member else f"<@{schedule.user_id}>"
+            try:
+                member = await interaction.guild.fetch_member(schedule.user_id)
+                display_name = member.display_name
+            except Exception:
+                display_name = f"<@{schedule.user_id}>"
             embed.add_field(
                 name=f"{icon} {display_name}",
                 value=(
