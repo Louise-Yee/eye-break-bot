@@ -2,12 +2,12 @@ import logging
 import discord
 from datetime import datetime, timezone
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [AUDIT] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 log = logging.getLogger("audit")
+log.setLevel(logging.INFO)
+log.propagate = False
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(asctime)s [AUDIT] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+log.addHandler(_handler)
 
 AUDIT_CHANNEL_ID = 1515254837917257781
 _client = None
