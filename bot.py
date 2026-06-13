@@ -189,6 +189,7 @@ class ClockInView(View):
             return
         set_clocked_in(self.user_id, True)
         reset_breaks(self.user_id)
+        user_last_reminded[self.user_id] = datetime.now(pytz.utc)
         self.stop()
         await audit.clock_in(self.user_id)
         await interaction.response.edit_message(
@@ -384,6 +385,7 @@ def owner_only(interaction: discord.Interaction) -> bool:
 async def admin_clockin(interaction: discord.Interaction, user: discord.Member):
     set_clocked_in(user.id, True)
     reset_breaks(user.id)
+    user_last_reminded[user.id] = datetime.now(pytz.utc)
     await audit.admin_clock_in(interaction.user.id, user.id)
     channel = client.get_channel(REMINDER_CHANNEL_ID)
     if channel:
@@ -429,10 +431,13 @@ async def admin_error(interaction: discord.Interaction, error):
         await interaction.response.send_message("Owner only.", ephemeral=True)
 
 
+# Per-user last reminder timestamp (UTC)
+user_last_reminded: dict[int, datetime] = {}
+
+
 async def background_loop():
     await client.wait_until_ready()
     channel = client.get_channel(REMINDER_CHANNEL_ID)
-    last_break_minute = -1
 
     while not client.is_closed():
         await asyncio.sleep(30)
@@ -465,6 +470,7 @@ async def background_loop():
                 clocked_in, _, _ = get_clock_status(user_id)
                 if clocked_in:
                     set_clocked_in(user_id, False)
+                    user_last_reminded.pop(user_id, None)
                     await audit.clock_out(user_id, reason="auto")
                     await channel.send(f"<@{user_id}> Work hours ended. Clocked out. Good work today!")
                 clock_in_prompted.discard(user_id)
@@ -473,20 +479,25 @@ async def background_loop():
             if current == "00:00":
                 clock_in_prompted.discard(user_id)
 
-        # Break reminder every 20 min (on the minute mark)
-        current_minute = now_utc.hour * 60 + now_utc.minute
-        if current_minute % REMINDER_INTERVAL_MINUTES == 0 and current_minute != last_break_minute:
-            last_break_minute = current_minute
-            clocked_in_users = get_clocked_in_users()
-            if clocked_in_users:
-                mentions = " ".join(f"<@{uid}>" for uid in clocked_in_users)
-                view = BreakView(set(clocked_in_users))
-                await audit.break_reminder_sent(clocked_in_users)
-                msg = await channel.send(
-                    f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
-                    view=view
-                )
-                view.message = msg
+        # Per-user break reminders — 20 min after clock-in or last reminder
+        clocked_in_users = get_clocked_in_users()
+        due = []
+        for user_id in clocked_in_users:
+            last = user_last_reminded.get(user_id)
+            elapsed = (now_utc - last).total_seconds() if last else float("inf")
+            if elapsed >= REMINDER_INTERVAL_MINUTES * 60:
+                due.append(user_id)
+                user_last_reminded[user_id] = now_utc
+
+        if due:
+            mentions = " ".join(f"<@{uid}>" for uid in due)
+            view = BreakView(set(due))
+            await audit.break_reminder_sent(due)
+            msg = await channel.send(
+                f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
+                view=view
+            )
+            view.message = msg
 
 
 @client.event
