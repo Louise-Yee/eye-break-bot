@@ -385,7 +385,7 @@ async def background_loop():
             continue
 
         schedules = get_all_schedules()
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(pytz.utc)
 
         for user_id, timezone, start_time, end_time in schedules:
             tz = pytz.timezone(timezone)
