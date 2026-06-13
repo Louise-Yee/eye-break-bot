@@ -1,11 +1,12 @@
 import discord
 from discord import app_commands
 from discord.ui import Select, View, Modal, TextInput, Button
-import sqlite3
 import asyncio
 from datetime import datetime
 import pytz
 import os
+import psycopg2
+import psycopg2.extras
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -14,9 +15,8 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 REMINDER_CHANNEL_ID = int(os.environ.get("REMINDER_CHANNEL_ID", "1515210070550384792"))
 REMINDER_INTERVAL_MINUTES = 20
 OWNER_ID = 315109913632440321
+DATABASE_URL = os.environ["DATABASE_URL"]
 # --------------
-
-DB = "schedules.db"
 
 TIMEZONES = [
     ("Malaysia (GMT+8)", "Asia/Kuala_Lumpur"),
@@ -35,106 +35,129 @@ TIMEZONES = [
 ]
 
 
+def get_conn():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
+
+
 def init_db():
-    con = sqlite3.connect(DB)
-    con.execute("""
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS schedules (
-            user_id INTEGER PRIMARY KEY,
+            user_id BIGINT PRIMARY KEY,
             timezone TEXT,
             start_time TEXT,
             end_time TEXT
         )
     """)
-    con.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS clock_status (
-            user_id INTEGER PRIMARY KEY,
-            clocked_in INTEGER DEFAULT 0,
+            user_id BIGINT PRIMARY KEY,
+            clocked_in BOOLEAN DEFAULT FALSE,
             breaks_taken INTEGER DEFAULT 0,
             breaks_missed INTEGER DEFAULT 0
         )
     """)
     con.commit()
+    cur.close()
     con.close()
 
 
 def save_schedule(user_id, timezone, start_time, end_time):
-    con = sqlite3.connect(DB)
-    con.execute("""
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("""
         INSERT INTO schedules (user_id, timezone, start_time, end_time)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         ON CONFLICT(user_id) DO UPDATE SET
-            timezone=excluded.timezone,
-            start_time=excluded.start_time,
-            end_time=excluded.end_time
+            timezone=EXCLUDED.timezone,
+            start_time=EXCLUDED.start_time,
+            end_time=EXCLUDED.end_time
     """, (user_id, timezone, start_time, end_time))
     con.commit()
+    cur.close()
     con.close()
 
 
 def remove_schedule(user_id):
-    con = sqlite3.connect(DB)
-    con.execute("DELETE FROM schedules WHERE user_id = ?", (user_id,))
-    con.execute("DELETE FROM clock_status WHERE user_id = ?", (user_id,))
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("DELETE FROM schedules WHERE user_id = %s", (user_id,))
+    cur.execute("DELETE FROM clock_status WHERE user_id = %s", (user_id,))
     con.commit()
+    cur.close()
     con.close()
 
 
 def get_all_schedules():
-    con = sqlite3.connect(DB)
-    rows = con.execute("SELECT user_id, timezone, start_time, end_time FROM schedules").fetchall()
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("SELECT user_id, timezone, start_time, end_time FROM schedules")
+    rows = cur.fetchall()
+    cur.close()
     con.close()
     return rows
 
 
 def set_clocked_in(user_id, value: bool):
-    con = sqlite3.connect(DB)
-    con.execute("""
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("""
         INSERT INTO clock_status (user_id, clocked_in, breaks_taken, breaks_missed)
-        VALUES (?, ?, 0, 0)
-        ON CONFLICT(user_id) DO UPDATE SET clocked_in=excluded.clocked_in
-    """, (user_id, 1 if value else 0))
+        VALUES (%s, %s, 0, 0)
+        ON CONFLICT(user_id) DO UPDATE SET clocked_in=EXCLUDED.clocked_in
+    """, (user_id, value))
     con.commit()
+    cur.close()
     con.close()
 
 
 def reset_breaks(user_id):
-    con = sqlite3.connect(DB)
-    con.execute("""
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("""
         INSERT INTO clock_status (user_id, clocked_in, breaks_taken, breaks_missed)
-        VALUES (?, 1, 0, 0)
+        VALUES (%s, TRUE, 0, 0)
         ON CONFLICT(user_id) DO UPDATE SET breaks_taken=0, breaks_missed=0
     """, (user_id,))
     con.commit()
+    cur.close()
     con.close()
 
 
 def record_break(user_id, took: bool):
     col = "breaks_taken" if took else "breaks_missed"
-    con = sqlite3.connect(DB)
-    con.execute(f"""
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute(f"""
         INSERT INTO clock_status (user_id, clocked_in, breaks_taken, breaks_missed)
-        VALUES (?, 1, 0, 0)
+        VALUES (%s, TRUE, 0, 0)
         ON CONFLICT(user_id) DO UPDATE SET {col}={col}+1
     """, (user_id,))
     con.commit()
+    cur.close()
     con.close()
 
 
 def get_clock_status(user_id):
-    con = sqlite3.connect(DB)
-    row = con.execute(
-        "SELECT clocked_in, breaks_taken, breaks_missed FROM clock_status WHERE user_id=?",
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute(
+        "SELECT clocked_in, breaks_taken, breaks_missed FROM clock_status WHERE user_id=%s",
         (user_id,)
-    ).fetchone()
+    )
+    row = cur.fetchone()
+    cur.close()
     con.close()
-    return row or (0, 0, 0)
+    return row or (False, 0, 0)
 
 
 def get_clocked_in_users():
-    con = sqlite3.connect(DB)
-    rows = con.execute(
-        "SELECT user_id FROM clock_status WHERE clocked_in=1"
-    ).fetchall()
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("SELECT user_id FROM clock_status WHERE clocked_in=TRUE")
+    rows = cur.fetchall()
+    cur.close()
     con.close()
     return [r[0] for r in rows]
 
