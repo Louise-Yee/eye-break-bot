@@ -132,7 +132,7 @@ def record_break(user_id, took: bool):
     cur.execute(f"""
         INSERT INTO clock_status (user_id, clocked_in, breaks_taken, breaks_missed)
         VALUES (%s, TRUE, 0, 0)
-        ON CONFLICT(user_id) DO UPDATE SET {col}={col}+1
+        ON CONFLICT(user_id) DO UPDATE SET {col}=clock_status.{col}+1
     """, (user_id,))
     con.commit()
     cur.close()
