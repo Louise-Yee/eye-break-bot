@@ -18,12 +18,13 @@ class ScheduleCog(commands.Cog):
 
     @app_commands.command(name="timeoff", description="Stop receiving eye break reminders")
     async def timeoff(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
         clock_service.clock_out(interaction.user.id)
         schedule_service.remove_schedule(interaction.user.id)
         state.user_last_reminded.pop(interaction.user.id, None)
         state.clock_in_prompted.discard(interaction.user.id)
         await audit.schedule_removed(interaction.user.id, interaction.user)
-        await interaction.response.send_message("Removed. You won't receive reminders anymore.", ephemeral=True)
+        await interaction.followup.send("Removed. You won't receive reminders anymore.", ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

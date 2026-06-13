@@ -26,9 +26,10 @@ class WorkHoursModal(Modal, title="Set Work Hours"):
                 "Invalid time format. Use HH:MM (e.g. 09:00).", ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
         schedule_service.save_schedule(interaction.user.id, self.tz_name, start, end)
         await audit.schedule_set(interaction.user.id, interaction.user, self.tz_name, start, end)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Saved. Clock-in prompt at {start}, reminders every {REMINDER_INTERVAL_MINUTES} min until {end} ({self.tz_label}).",
             ephemeral=True,
         )

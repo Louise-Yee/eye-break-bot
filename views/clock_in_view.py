@@ -17,11 +17,12 @@ class ClockInView(View):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not for you.", ephemeral=True)
             return
+        await interaction.response.defer()
         clock_service.clock_in(self.user_id)
         state.user_last_reminded[self.user_id] = datetime.now(pytz.utc)
         self.stop()
         await audit.clock_in(self.user_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"<@{self.user_id}> clocked in. Break reminders started.",
             view=None,
         )
@@ -31,9 +32,10 @@ class ClockInView(View):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This is not for you.", ephemeral=True)
             return
+        await interaction.response.defer()
         self.stop()
         await audit.clock_in_skipped(self.user_id)
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=f"<@{self.user_id}> skipped clock-in.",
             view=None,
         )
