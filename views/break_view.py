@@ -22,8 +22,9 @@ class BreakView(View):
         return "\n".join(lines)
 
     async def _update(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
         all_responded = (self.taken | self.missed) >= self.user_ids
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content=self._build_content(),
             view=None if all_responded else self,
         )

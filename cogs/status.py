@@ -14,9 +14,10 @@ class StatusCog(commands.Cog):
 
     @app_commands.command(name="status", description="See who is clocked in and their break stats")
     async def status(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
         schedules = schedule_service.get_all_schedules()
         if not schedules:
-            await interaction.response.send_message("No users registered.", ephemeral=True)
+            await interaction.followup.send("No users registered.", ephemeral=True)
             return
 
         embed = discord.Embed(title="Work Status", color=discord.Color.blue())
@@ -41,7 +42,7 @@ class StatusCog(commands.Cog):
                 inline=False,
             )
         await audit.status_checked(interaction.user.id)
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:
