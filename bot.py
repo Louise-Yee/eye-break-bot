@@ -8,6 +8,7 @@ import os
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
+import audit_logger as audit
 load_dotenv()
 
 # --- CONFIG ---
@@ -189,6 +190,7 @@ class ClockInView(View):
         set_clocked_in(self.user_id, True)
         reset_breaks(self.user_id)
         self.stop()
+        await audit.clock_in(self.user_id)
         await interaction.response.edit_message(
             content=f"<@{self.user_id}> clocked in. Break reminders started.",
             view=None
@@ -200,6 +202,7 @@ class ClockInView(View):
             await interaction.response.send_message("This is not for you.", ephemeral=True)
             return
         self.stop()
+        await audit.clock_in_skipped(self.user_id)
         await interaction.response.edit_message(
             content=f"<@{self.user_id}> skipped clock-in.",
             view=None
@@ -210,36 +213,56 @@ class BreakView(View):
     def __init__(self, user_ids):
         super().__init__(timeout=300)
         self.user_ids = set(user_ids)
-        self.responded = set()
+        self.taken = set()
+        self.missed = set()
+
+    def _build_content(self):
+        lines = ["Eye break! Look 20 feet away for 20 seconds. Did you take your break?"]
+        for uid in self.user_ids:
+            if uid in self.taken:
+                lines.append(f"<@{uid}> took their break")
+            elif uid in self.missed:
+                lines.append(f"<@{uid}> skipped their break")
+        return "\n".join(lines)
+
+    async def _update(self, interaction: discord.Interaction):
+        all_responded = (self.taken | self.missed) >= self.user_ids
+        await interaction.response.edit_message(
+            content=self._build_content(),
+            view=None if all_responded else self,
+        )
 
     async def on_timeout(self):
         for user_id in self.user_ids:
-            if user_id not in self.responded:
+            if user_id not in self.taken and user_id not in self.missed:
                 record_break(user_id, took=False)
+                await audit.break_missed(user_id, reason="timeout")
 
     @discord.ui.button(label="Yes, took break", style=discord.ButtonStyle.success)
     async def yes(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id not in self.user_ids:
             await interaction.response.send_message("You are not in the current break group.", ephemeral=True)
             return
-        if interaction.user.id in self.responded:
+        if interaction.user.id in self.taken or interaction.user.id in self.missed:
             await interaction.response.send_message("Already responded.", ephemeral=True)
             return
-        self.responded.add(interaction.user.id)
+        self.taken.add(interaction.user.id)
         record_break(interaction.user.id, took=True)
-        await interaction.response.send_message("Great! Keep it up.", ephemeral=True)
+        await audit.break_taken(interaction.user.id)
+        await self._update(interaction)
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
     async def no(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id not in self.user_ids:
             await interaction.response.send_message("You are not in the current break group.", ephemeral=True)
             return
-        if interaction.user.id in self.responded:
+        if interaction.user.id in self.taken or interaction.user.id in self.missed:
             await interaction.response.send_message("Already responded.", ephemeral=True)
             return
-        self.responded.add(interaction.user.id)
+        self.missed.add(interaction.user.id)
         record_break(interaction.user.id, took=False)
-        await interaction.response.send_message("Try to take the next one!", ephemeral=True)
+        await audit.break_missed(interaction.user.id, reason="no")
+        await self._update(interaction)
 
 
 # --- Modals / Selects ---
@@ -265,6 +288,7 @@ class WorkHoursModal(Modal, title="Set Work Hours"):
             )
             return
         save_schedule(interaction.user.id, self.tz_name, start, end)
+        await audit.schedule_set(interaction.user.id, interaction.user, self.tz_name, start, end)
         await interaction.response.send_message(
             f"Saved. Clock-in prompt at {start}, reminders every {REMINDER_INTERVAL_MINUTES} min until {end} ({self.tz_label}).",
             ephemeral=True,
@@ -314,6 +338,7 @@ async def timeon(interaction: discord.Interaction):
 async def timeoff(interaction: discord.Interaction):
     set_clocked_in(interaction.user.id, False)
     remove_schedule(interaction.user.id)
+    await audit.schedule_removed(interaction.user.id, interaction.user)
     await interaction.response.send_message(
         "Removed. You won't receive reminders anymore.", ephemeral=True
     )
@@ -341,6 +366,7 @@ async def status(interaction: discord.Interaction):
             ),
             inline=False,
         )
+    await audit.status_checked(interaction.user.id)
     await interaction.response.send_message(embed=embed)
 
 
@@ -353,10 +379,10 @@ def owner_only(interaction: discord.Interaction) -> bool:
 async def admin_clockin(interaction: discord.Interaction, user: discord.Member):
     set_clocked_in(user.id, True)
     reset_breaks(user.id)
+    await audit.admin_clock_in(interaction.user.id, user.id)
     channel = client.get_channel(REMINDER_CHANNEL_ID)
     if channel:
-        view = ClockInView(user.id)
-        await channel.send(f"<@{user.id}> manually clocked in by admin.", view=None)
+        await channel.send(f"<@{user.id}> manually clocked in by admin.")
     await interaction.response.send_message(f"{user.display_name} clocked in.", ephemeral=True)
 
 
@@ -364,6 +390,7 @@ async def admin_clockin(interaction: discord.Interaction, user: discord.Member):
 @app_commands.check(owner_only)
 async def admin_clockout(interaction: discord.Interaction, user: discord.Member):
     set_clocked_in(user.id, False)
+    await audit.admin_clock_out(interaction.user.id, user.id)
     channel = client.get_channel(REMINDER_CHANNEL_ID)
     if channel:
         await channel.send(f"<@{user.id}> manually clocked out by admin.")
@@ -380,6 +407,7 @@ async def admin_test(interaction: discord.Interaction):
         return
     mentions = " ".join(f"<@{uid}>" for uid in clocked_in_users)
     view = BreakView(set(clocked_in_users))
+    await audit.admin_test(interaction.user.id, clocked_in_users)
     await channel.send(
         f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
         view=view
@@ -419,6 +447,7 @@ async def background_loop():
             if current == start_time and user_id not in clock_in_prompted:
                 clock_in_prompted.add(user_id)
                 set_clocked_in(user_id, False)
+                await audit.clock_in_prompt_sent(user_id, start_time)
                 view = ClockInView(user_id)
                 await channel.send(
                     f"<@{user_id}> It's {start_time} — time to start work. Clock in?",
@@ -430,6 +459,7 @@ async def background_loop():
                 clocked_in, _, _ = get_clock_status(user_id)
                 if clocked_in:
                     set_clocked_in(user_id, False)
+                    await audit.clock_out(user_id, reason="auto")
                     await channel.send(f"<@{user_id}> Work hours ended. Clocked out. Good work today!")
                 clock_in_prompted.discard(user_id)
 
@@ -445,6 +475,7 @@ async def background_loop():
             if clocked_in_users:
                 mentions = " ".join(f"<@{uid}>" for uid in clocked_in_users)
                 view = BreakView(set(clocked_in_users))
+                await audit.break_reminder_sent(clocked_in_users)
                 await channel.send(
                     f"{mentions} Eye break! Look 20 feet away for 20 seconds. Did you take your break?",
                     view=view
@@ -455,6 +486,7 @@ MY_GUILD = discord.Object(id=1515210069480833125)
 
 @client.event
 async def on_ready():
+    audit.init(client)
     tree.copy_global_to(guild=MY_GUILD)
     await tree.sync(guild=MY_GUILD)
     print(f"Logged in as {client.user}")
