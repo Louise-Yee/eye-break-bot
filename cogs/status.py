@@ -42,9 +42,10 @@ def _build_admin_embed(
     page: int,
     total_pages: int,
     search_id: int | None = None,
+    search_name: str | None = None,
 ) -> discord.Embed:
     if search_id is not None:
-        title = f"Work Status — Search: `{search_id}`"
+        title = "Work Status — User Search"
         desc = f"{len(entries)} result(s)"
     else:
         filter_label = {"all": "All", "clocked_in": "Clocked In", "clocked_out": "Clocked Out"}[filter_mode]
@@ -52,9 +53,17 @@ def _build_admin_embed(
         desc = f"Page {page + 1}/{total_pages} · {len(entries)} user(s)"
 
     embed = discord.Embed(title=title, color=discord.Color.blue(), description=desc)
+
     if not entries:
-        embed.add_field(name="No results", value="No users match this filter/search.", inline=False)
+        name = f"⚫ {search_name}" if search_name else "No results"
+        value = (
+            "This user has not registered their work hours yet. They need to use /timeon first."
+            if search_name
+            else "No users match this filter."
+        )
+        embed.add_field(name=name, value=value, inline=False)
         return embed
+
     for entry in entries[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]:
         icon = "🟢" if entry.clocked_in else "⚪"
         embed.add_field(
@@ -67,38 +76,6 @@ def _build_admin_embed(
             inline=False,
         )
     return embed
-
-
-class SearchModal(discord.ui.Modal, title="Search by User ID"):
-    user_id_input: discord.ui.TextInput = discord.ui.TextInput(
-        label="User ID",
-        placeholder="e.g. 123456789012345678",
-        min_length=1,
-        max_length=20,
-    )
-
-    def __init__(self, view: "AdminStatusView") -> None:
-        super().__init__()
-        self._view = view
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        raw = self.user_id_input.value.strip()
-        if not raw.isdigit():
-            await interaction.response.send_message("Invalid ID — must be numeric.", ephemeral=True)
-            return
-        self._view.search_id = int(raw)
-        self._view.page = 0
-        self._view.filter_select.disabled = True
-        self._view.clear_search.disabled = False
-        entries = self._view._filtered()
-        total_pages = self._view._total_pages(entries)
-        self._view._sync_buttons(total_pages)
-        embed = _build_admin_embed(
-            entries, self._view.filter_mode, self._view.page, total_pages, self._view.search_id
-        )
-        await interaction.response.defer()
-        if self._view.message is not None:
-            await self._view.message.edit(embed=embed, view=self._view)
 
 
 class FilterSelect(discord.ui.Select):
@@ -119,6 +96,29 @@ class FilterSelect(discord.ui.Select):
         await view.refresh(interaction)
 
 
+class UserSearchSelect(discord.ui.UserSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder="Search user...", min_values=1, max_values=1, row=2)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: AdminStatusView = self.view  # type: ignore[assignment]
+        selected = self.values[0]
+        view.search_id = selected.id
+        view.search_name = selected.display_name
+        view.page = 0
+        view.filter_select.disabled = True
+        view.clear_search.disabled = False
+        entries = view._filtered()
+        total_pages = view._total_pages(entries)
+        view._sync_buttons(total_pages)
+        embed = _build_admin_embed(
+            entries, view.filter_mode, view.page, total_pages,
+            search_id=view.search_id,
+            search_name=view.search_name if not entries else None,
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
 class AdminStatusView(discord.ui.View):
     def __init__(self, all_entries: list[StatusEntry]) -> None:
         super().__init__(timeout=120)
@@ -126,6 +126,7 @@ class AdminStatusView(discord.ui.View):
         self.filter_mode: str = "all"
         self.page: int = 0
         self.search_id: int | None = None
+        self.search_name: str | None = None
         self.message: discord.WebhookMessage | None = None
         self.filter_select = FilterSelect()
         self.add_item(self.filter_select)
@@ -153,7 +154,11 @@ class AdminStatusView(discord.ui.View):
         total_pages = self._total_pages(entries)
         self.page = min(self.page, max(0, total_pages - 1))
         self._sync_buttons(total_pages)
-        embed = _build_admin_embed(entries, self.filter_mode, self.page, total_pages, self.search_id)
+        embed = _build_admin_embed(
+            entries, self.filter_mode, self.page, total_pages,
+            search_id=self.search_id,
+            search_name=self.search_name if not entries else None,
+        )
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="|<", style=discord.ButtonStyle.secondary, disabled=True, row=1)
@@ -177,13 +182,10 @@ class AdminStatusView(discord.ui.View):
         self.page = self._total_pages(entries) - 1
         await self.refresh(interaction)
 
-    @discord.ui.button(label="Search ID", style=discord.ButtonStyle.primary, row=2)
-    async def search(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(SearchModal(self))
-
-    @discord.ui.button(label="Clear Search", style=discord.ButtonStyle.danger, disabled=True, row=2)
+    @discord.ui.button(label="Clear Search", style=discord.ButtonStyle.danger, disabled=True, row=3)
     async def clear_search(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.search_id = None
+        self.search_name = None
         self.page = 0
         self.filter_select.disabled = False
         button.disabled = True
@@ -230,6 +232,7 @@ class StatusCog(commands.Cog):
             ))
 
         view = AdminStatusView(entries)
+        view.add_item(UserSearchSelect())
         total_pages = view._total_pages(entries)
         view._sync_buttons(total_pages)
         embed = _build_admin_embed(entries, "all", 0, total_pages)
