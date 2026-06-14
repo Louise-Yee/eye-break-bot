@@ -16,3 +16,7 @@ def remove_schedule(user_id: int) -> None:
 
 def get_all_schedules() -> list[Schedule]:
     return schedule_repo.get_all()
+
+
+def get_schedule(user_id: int) -> Schedule | None:
+    return schedule_repo.get(user_id)

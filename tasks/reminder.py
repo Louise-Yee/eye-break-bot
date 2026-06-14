@@ -21,7 +21,7 @@ async def reminder_task(bot: discord.Client) -> None:
             channel = bot.get_channel(REMINDER_CHANNEL_ID)
             continue
 
-        schedules = schedule_service.get_all_schedules()
+        schedules = await asyncio.to_thread(schedule_service.get_all_schedules)
         now_utc = datetime.now(pytz.utc)
 
         for schedule in schedules:
@@ -30,7 +30,7 @@ async def reminder_task(bot: discord.Client) -> None:
 
             if current == schedule.start_time and schedule.user_id not in state.clock_in_prompted:
                 state.clock_in_prompted.add(schedule.user_id)
-                clock_service.clock_out(schedule.user_id)
+                await asyncio.to_thread(clock_service.clock_out, schedule.user_id)
                 await audit.clock_in_prompt_sent(schedule.user_id, schedule.start_time)
                 view = ClockInView(schedule.user_id)
                 await channel.send(
@@ -39,9 +39,9 @@ async def reminder_task(bot: discord.Client) -> None:
                 )
 
             if current == schedule.end_time:
-                status = clock_service.get_status(schedule.user_id)
+                status = await asyncio.to_thread(clock_service.get_status, schedule.user_id)
                 if status.clocked_in:
-                    clock_service.clock_out(schedule.user_id)
+                    await asyncio.to_thread(clock_service.clock_out, schedule.user_id)
                     state.user_last_reminded.pop(schedule.user_id, None)
                     await audit.clock_out(schedule.user_id, reason="auto")
                     await channel.send(f"<@{schedule.user_id}> Work hours ended. Clocked out. Good work today!")
@@ -50,7 +50,7 @@ async def reminder_task(bot: discord.Client) -> None:
             if current == "00:00":
                 state.clock_in_prompted.discard(schedule.user_id)
 
-        clocked_in_users = clock_service.get_clocked_in_users()
+        clocked_in_users = await asyncio.to_thread(clock_service.get_clocked_in_users)
         due: list[int] = []
         for user_id in clocked_in_users:
             last = state.user_last_reminded.get(user_id)

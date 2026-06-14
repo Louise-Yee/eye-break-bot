@@ -35,3 +35,13 @@ def get_all() -> list[Schedule]:
     cur.close()
     con.close()
     return [Schedule(user_id=r[0], timezone=r[1], start_time=r[2], end_time=r[3]) for r in rows]
+
+
+def get(user_id: int) -> Schedule | None:
+    con = get_conn()
+    cur = con.cursor()
+    cur.execute("SELECT user_id, timezone, start_time, end_time FROM schedules WHERE user_id = %s", (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    con.close()
+    return Schedule(user_id=row[0], timezone=row[1], start_time=row[2], end_time=row[3]) if row else None
