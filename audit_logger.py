@@ -133,8 +133,15 @@ async def admin_test(admin_id, user_ids):
     })
 
 
-async def status_checked(user_id):
+async def status_checked(user_id: int) -> None:
     log.info(f"STATUS_CHECKED user={user_id}")
     await _send(discord.Color.blurple(), "Status Checked", {
         "User": f"<@{user_id}>",
+    })
+
+
+async def admin_status_checked(admin_id: int) -> None:
+    log.info(f"ADMIN_STATUS_CHECKED admin={admin_id}")
+    await _send(discord.Color.blurple(), "Admin: Status Checked", {
+        "Admin": f"<@{admin_id}>",
     })

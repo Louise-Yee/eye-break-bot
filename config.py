@@ -7,6 +7,7 @@ REMINDER_CHANNEL_ID: int = int(os.environ.get("REMINDER_CHANNEL_ID", "1515210070
 REMINDER_INTERVAL_MINUTES: int = 20
 OWNER_ID: int = 315109913632440321
 GUILD_ID: int = 1515210069480833125
+ADMIN_ROLE_ID: int | None = int(os.environ["ADMIN_ROLE_ID"]) if os.environ.get("ADMIN_ROLE_ID") else None
 
 TIMEZONES: list[tuple[str, str]] = [
     ("Malaysia (GMT+8)", "Asia/Kuala_Lumpur"),
