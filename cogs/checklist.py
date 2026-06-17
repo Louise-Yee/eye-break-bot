@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -16,12 +17,12 @@ class ChecklistCog(commands.Cog):
     @app_commands.describe(name="Name for the checklist")
     async def create(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        existing = checklist_service.get_checklist(interaction.user.id, name)
+        existing = await asyncio.to_thread(checklist_service.get_checklist, interaction.user.id, name)
         if existing is not None:
             await interaction.followup.send(f"A checklist named '{name}' already exists. Use /checklist view.", ephemeral=True)
             return
-        checklist = checklist_service.create_checklist(interaction.user.id, name)
-        items = checklist_service.get_items(checklist.id)
+        checklist = await asyncio.to_thread(checklist_service.create_checklist, interaction.user.id, name)
+        items = await asyncio.to_thread(checklist_service.get_items, checklist.id)
         view = ChecklistView(checklist, items)
         msg = await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)
         view.message = msg
@@ -31,11 +32,11 @@ class ChecklistCog(commands.Cog):
     @app_commands.describe(name="Name of the checklist to view")
     async def view(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        checklist = checklist_service.get_checklist(interaction.user.id, name)
+        checklist = await asyncio.to_thread(checklist_service.get_checklist, interaction.user.id, name)
         if checklist is None:
             await interaction.followup.send(f"No checklist named '{name}'. Use /checklist create.", ephemeral=True)
             return
-        items = checklist_service.get_items(checklist.id)
+        items = await asyncio.to_thread(checklist_service.get_items, checklist.id)
         cv = ChecklistView(checklist, items)
         msg = await interaction.followup.send(embed=cv.build_embed(), view=cv, ephemeral=True)
         cv.message = msg
@@ -44,7 +45,7 @@ class ChecklistCog(commands.Cog):
     @checklist.command(name="list", description="List all your checklists")
     async def list_checklists(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-        checklists = checklist_service.get_all_checklists(interaction.user.id)
+        checklists = await asyncio.to_thread(checklist_service.get_all_checklists, interaction.user.id)
         if not checklists:
             await interaction.followup.send("You have no checklists. Use /checklist create.", ephemeral=True)
             return
@@ -55,11 +56,11 @@ class ChecklistCog(commands.Cog):
     @app_commands.describe(name="Name of the checklist to delete")
     async def delete(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
-        checklist = checklist_service.get_checklist(interaction.user.id, name)
+        checklist = await asyncio.to_thread(checklist_service.get_checklist, interaction.user.id, name)
         if checklist is None:
             await interaction.followup.send(f"No checklist named '{name}'.", ephemeral=True)
             return
-        checklist_service.delete_checklist(checklist.id)
+        await asyncio.to_thread(checklist_service.delete_checklist, checklist.id)
         await interaction.followup.send(f"Checklist '{name}' deleted.", ephemeral=True)
         await audit.checklist_deleted(interaction.user.id, name)
 

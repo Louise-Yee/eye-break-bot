@@ -1,3 +1,4 @@
+import asyncio
 import discord
 import audit_logger as audit
 from models.checklist import Checklist, ChecklistItem
@@ -21,8 +22,8 @@ class AddItemModal(discord.ui.Modal, title="Add Item"):
         if not text:
             await interaction.response.send_message("Item text cannot be empty.", ephemeral=True)
             return
-        checklist_service.add_item(self.checklist.id, text)
-        items = checklist_service.get_items(self.checklist.id)
+        await asyncio.to_thread(checklist_service.add_item, self.checklist.id, text)
+        items = await asyncio.to_thread(checklist_service.get_items, self.checklist.id)
         new_view = ChecklistView(self.checklist, items)
         new_view.message = self.parent_message
         await interaction.response.defer()
@@ -48,9 +49,9 @@ class ItemToggleSelect(discord.ui.Select):
         item_id = int(self.values[0])
         item = self._item_map[str(item_id)]
         new_checked = not item.checked
-        checklist_service.toggle_item(item_id, new_checked)
+        await asyncio.to_thread(checklist_service.toggle_item, item_id, new_checked)
         view: ChecklistView = self.view  # type: ignore
-        updated_items = checklist_service.get_items(view.checklist.id)
+        updated_items = await asyncio.to_thread(checklist_service.get_items, view.checklist.id)
         new_view = ChecklistView(view.checklist, updated_items)
         new_view.message = view.message
         await interaction.response.edit_message(embed=new_view.build_embed(), view=new_view)
@@ -94,8 +95,8 @@ class ChecklistView(discord.ui.View):
 
     @discord.ui.button(label="Reset All", style=discord.ButtonStyle.secondary, row=1)
     async def reset_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        checklist_service.reset_items(self.checklist.id)
-        items = checklist_service.get_items(self.checklist.id)
+        await asyncio.to_thread(checklist_service.reset_items, self.checklist.id)
+        items = await asyncio.to_thread(checklist_service.get_items, self.checklist.id)
         new_view = ChecklistView(self.checklist, items)
         new_view.message = self.message
         await interaction.response.edit_message(embed=new_view.build_embed(), view=new_view)
@@ -103,7 +104,7 @@ class ChecklistView(discord.ui.View):
 
     @discord.ui.button(label="Delete Checklist", style=discord.ButtonStyle.danger, row=1)
     async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        checklist_service.delete_checklist(self.checklist.id)
+        await asyncio.to_thread(checklist_service.delete_checklist, self.checklist.id)
         await interaction.response.edit_message(
             content=f"Checklist '{self.checklist.name}' deleted.",
             embed=None,
