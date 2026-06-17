@@ -64,6 +64,17 @@ class ChecklistCog(commands.Cog):
         await interaction.followup.send(f"Checklist '{name}' deleted.", ephemeral=True)
         await audit.checklist_deleted(interaction.user.id, name)
 
+    @create.error
+    @view.error
+    @list_checklists.error
+    @delete.error
+    async def checklist_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        msg = "Database error. Try again in a moment."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ChecklistCog(bot))
