@@ -32,6 +32,23 @@ def init_db() -> None:
             breaks_missed INTEGER DEFAULT 0
         )
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS checklists (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            name TEXT NOT NULL,
+            UNIQUE(user_id, name)
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS checklist_items (
+            id SERIAL PRIMARY KEY,
+            checklist_id INTEGER NOT NULL REFERENCES checklists(id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            checked BOOLEAN DEFAULT FALSE,
+            position INTEGER NOT NULL DEFAULT 0
+        )
+    """)
     con.commit()
     cur.close()
     con.close()

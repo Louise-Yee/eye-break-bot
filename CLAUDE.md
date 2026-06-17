@@ -4,6 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Infrastructure
+
+- **Hosting:** Koyeb (free tier — 0.1 vCPU, 512MB RAM, no sleep), deployed from GitHub repo
+- **Database:** Supabase (PostgreSQL)
+
+---
+
 ## Running the bot
 
 ```

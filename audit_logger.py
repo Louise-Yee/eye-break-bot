@@ -145,3 +145,54 @@ async def admin_status_checked(admin_id: int) -> None:
     await _send(discord.Color.blurple(), "Admin: Status Checked", {
         "Admin": f"<@{admin_id}>",
     })
+
+
+async def checklist_created(user_id: int, name: str) -> None:
+    log.info(f"CHECKLIST_CREATED user={user_id} name={name}")
+    await _send(discord.Color.blue(), "Checklist Created", {
+        "User": f"<@{user_id}>",
+        "Name": name,
+    })
+
+
+async def checklist_deleted(user_id: int, name: str) -> None:
+    log.info(f"CHECKLIST_DELETED user={user_id} name={name}")
+    await _send(discord.Color.red(), "Checklist Deleted", {
+        "User": f"<@{user_id}>",
+        "Name": name,
+    })
+
+
+async def checklist_viewed(user_id: int, name: str) -> None:
+    log.info(f"CHECKLIST_VIEWED user={user_id} name={name}")
+    await _send(discord.Color.blurple(), "Checklist Viewed", {
+        "User": f"<@{user_id}>",
+        "Name": name,
+    })
+
+
+async def checklist_item_added(user_id: int, checklist_name: str, item_text: str) -> None:
+    log.info(f"CHECKLIST_ITEM_ADDED user={user_id} checklist={checklist_name} item={item_text}")
+    await _send(discord.Color.green(), "Checklist Item Added", {
+        "User": f"<@{user_id}>",
+        "Checklist": checklist_name,
+        "Item": item_text,
+    })
+
+
+async def checklist_item_toggled(user_id: int, checklist_name: str, item_text: str, checked: bool) -> None:
+    log.info(f"CHECKLIST_ITEM_TOGGLED user={user_id} checklist={checklist_name} item={item_text} checked={checked}")
+    await _send(discord.Color.teal(), "Checklist Item Toggled", {
+        "User": f"<@{user_id}>",
+        "Checklist": checklist_name,
+        "Item": item_text,
+        "State": "done" if checked else "not done",
+    })
+
+
+async def checklist_reset(user_id: int, checklist_name: str) -> None:
+    log.info(f"CHECKLIST_RESET user={user_id} checklist={checklist_name}")
+    await _send(discord.Color.orange(), "Checklist Reset", {
+        "User": f"<@{user_id}>",
+        "Checklist": checklist_name,
+    })

@@ -20,6 +20,7 @@ class EyeBreakBot(commands.Bot):
         await self.load_extension("cogs.schedule")
         await self.load_extension("cogs.admin")
         await self.load_extension("cogs.status")
+        await self.load_extension("cogs.checklist")
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
         await self.tree.sync()
